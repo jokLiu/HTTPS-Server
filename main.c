@@ -21,6 +21,7 @@ main (int argc, char **argv) {
   assert (argv[0] && *argv[0]);
   myname = argv[0];
 
+    printf("%s", "yye");
   if (argc != 2) {
     fprintf (stderr, "%s: usage is %s port\n", myname, myname);
     exit (1);
@@ -48,6 +49,7 @@ main (int argc, char **argv) {
     exit (1);
   }
 
+
   conn = create_connection();
   if (PQstatus(conn) == CONNECTION_BAD) {
 
@@ -56,6 +58,18 @@ main (int argc, char **argv) {
     do_exit(conn);
     exit(1);
   }
+
+
+  PGresult *res = create_table(conn);
+  if (PQresultStatus(res) != PGRES_COMMAND_OK) {
+    fprintf (stderr, "%s: cannot create a table\n", myname);
+    do_exit(conn);
+    exit(1);
+  }
+  clear_result(res);
+
+
+  load_files_content(conn);
 
   if (service_listen_socket_multithread (s, conn) != 0) {
     fprintf (stderr, "%s: cannot process listen socket\n", myname);

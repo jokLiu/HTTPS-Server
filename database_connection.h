@@ -1,2 +1,10 @@
 void do_exit(PGconn *conn);
 PGconn* create_connection();
+PGresult* create_table(PGconn *conn);
+PGresult *populate_table(PGconn *conn, char *id, char *data);
+PGresult *query_table(PGconn *conn, char *id);
+char *get_result_content(PGresult *res);
+void clear_result(PGresult *res);
+void load_files_content(PGconn *conn);
+PGresult *delete_row(PGconn *conn, char *id);
+int check_exists(PGconn *conn, char *id);

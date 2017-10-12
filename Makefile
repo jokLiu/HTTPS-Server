@@ -18,7 +18,7 @@ LOCALLIBDIR = /usr/lib/x86_64-linux-gnu
 LDFLAGS = -L$(LOCALLIBDIR)
 
 common_objs=main.o get_listen_socket.o service_client_socket.o \
-	make_printable_address.o read_client_input.o database_connection.o
+	make_printable_address.o read_client_input.o database_connection.o \
 
 multi_objs=service_listen_socket_multithread.o
 
