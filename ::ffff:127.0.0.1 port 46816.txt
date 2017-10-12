@@ -1,0 +1,8 @@
+-----------------------------711905578590825235426245241
+Content-Disposition: form-data; name="myfile"; filename="in3_sorted.txt"
+Content-Type: text/plain
+
+bar
+foo
+
+-----------------------------711905578590825235426245241--

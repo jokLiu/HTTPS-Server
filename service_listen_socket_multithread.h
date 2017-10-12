@@ -1,1 +1,1 @@
-int service_listen_socket_multithread (const int s);
+int service_listen_socket_multithread (const int s,  PGconn *conn);

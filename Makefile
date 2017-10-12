@@ -3,50 +3,32 @@ hosts=mail.batten.eu.org pi-one.home.batten.eu.org gromit.cs.bham.ac.uk offsite8
 OS=$(shell uname -s)
 ZIP=socket
 
-CFLAGS=-Wall -Werror -std=gnu99 -g
+CFLAGS=-Wall -Werror -std=gnu99 -g -I/usr/include/postgresql
 # needlessly included for single-thread case: hardly a crime
-LIBS=-lpthread
+LIBS=-lpthread -lpq
 ifeq ($(OS), SunOS)
   LIBS+= -lsocket -lnsl
 endif
 
-CLANG=$(shell which clang)
 CC=cc
 
+BIN=multi_thread_server
 
-BIN=single_thread_server multi_thread_server client
+LOCALLIBDIR = /usr/lib/x86_64-linux-gnu 
+LDFLAGS = -L$(LOCALLIBDIR)
 
 common_objs=main.o get_listen_socket.o service_client_socket.o \
-	make_printable_address.o
-
-single_objs=service_listen_socket.o
+	make_printable_address.o read_client_input.o database_connection.o
 
 multi_objs=service_listen_socket_multithread.o
 
-all_objs=${common_objs} ${single_objs} ${multi_objs}
-
+all_objs=${common_objs} ${multi_objs}
 
 all: ${BIN}
 
-client: client.c
-	$(CC) $(CFLAGS) -o $@ $+ $(LIBS)
-
-single_thread_server: ${common_objs} ${single_objs}
-	${CC} -o $@ ${CFLAGS} $+ ${LIBS}
-
 multi_thread_server: ${common_objs} ${multi_objs}
-	${CC} -o $@ ${CFLAGS} $+ ${LIBS}
+	${CC} -o $@ ${CFLAGS} $+ ${LDFLAGS} ${LIBS}
 
 clean:
-	rm -f ${common_objs} ${BIN} ${single_objs} ${multi_objs} $(ZIP) *~
-
-# don't use this rule unless you understand exactly what it is doing
-
-zip: $(ZIP)
-
-$(ZIP):
-	zip --must-match $(ZIP) *.c  *.h Makefile README
-
-rsync:
-	for host in $(hosts); do rsync ${RSYNC_FLAGS} -avFF . $$host:socket; done
+	rm -f ${common_objs} ${BIN} ${multi_objs} $(ZIP) *~
 

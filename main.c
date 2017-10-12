@@ -4,9 +4,10 @@
 #include <errno.h>
 
 #include <assert.h>
-
+#include <libpq-fe.h>
 #include "get_listen_socket.h"
-#include "service_listen_socket.h"
+#include "service_listen_socket_multithread.h"
+#include "database_connection.h"
 
 char *myname = "unknown";
 
@@ -14,7 +15,7 @@ int
 main (int argc, char **argv) {
   int p, s;
   char *endp;
-
+  PGconn *conn;
   /* we are passed our name, and the name is non-null.  Just give up if this isn't true */
   
   assert (argv[0] && *argv[0]);
@@ -47,7 +48,16 @@ main (int argc, char **argv) {
     exit (1);
   }
 
-  if (service_listen_socket (s) != 0) {
+  conn = create_connection();
+  if (PQstatus(conn) == CONNECTION_BAD) {
+
+    fprintf(stderr, "Connection to database failed: %s\n",
+            PQerrorMessage(conn));
+    do_exit(conn);
+    exit(1);
+  }
+
+  if (service_listen_socket_multithread (s, conn) != 0) {
     fprintf (stderr, "%s: cannot process listen socket\n", myname);
     exit (1);
   }

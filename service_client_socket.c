@@ -12,55 +12,59 @@
 #include <arpa/inet.h>
 
 #include <assert.h>
-
+#include <libpq-fe.h>
 #include "service_client_socket.h"
-
-/* why can I not use const size_t here? */
+#include "read_client_input.h"
 #define buffer_size 10240
+
+
 void bad_request(const int s, char *path);
-int readHeaders(const int sock, char ***strings_ptr);
-void freeMemory(char **str, int s);
 int content_size(char **strings, int s);
 int find_content_length(char **strings, int s);
+int count_file_length(FILE *file);
 
-
-int service_client_socket (const int s, const char *const tag) {
+int service_client_socket (const int s, const char *const tag, PGconn *conn) {
   // allocating array of pointers to the strings
   int buffSize = 20;
   char** strings = malloc(buffSize * sizeof(char*));
-  char *token;
   char path[1000];
   char* pwd = getenv("PWD");
   strcpy(path, pwd);
   FILE *file;
   char *buffer;
-  // memset((void*)buffer, '\0', buffer_size);
   size_t bytes2;
   char buff[buffer_size];
   buff[buffer_size-1] = '\0';
   char str[100];
-  char *temp_buff;
+  char* temp_buff;
+
+  // tokens keeping the request header info
+  char* filepath;
+  char* request_method;
+  char* http_type;
   printf ("new connection from %s\n", tag);
 
   int amount =0;
-  while ((amount=readHeaders(s,&strings)) > 0 /*(amount=read (s, buffer, 1)) > 0*/) {
+  while ((amount=read_client_input(s,&strings)) > 0) {
       buffer = strings[0];
-      token =  strtok_r(buffer, " \t\n", &temp_buff );
+      request_method =  strtok_r(buffer, " \t\n", &temp_buff );
+      filepath = strtok_r(NULL, " \t\n",&temp_buff);
+      http_type = strtok_r(NULL, " \t\n", &temp_buff);
+
+      // if we get incorrect http request, respond to the client
+      // and discard the request
+      if (strncmp(http_type, "HTTP/1.1", 8) != 0) {
+          strcpy(path+strlen(pwd), "/badrequest.html");
+          bad_request(s, path);
+          continue;
+      }
 
 
-      if ( strncmp(token, "GET\0", 4)==0 ){
-          char* filepath = strtok_r(NULL, " \t\n",&temp_buff);
-          token = strtok_r(NULL, " \t\n", &temp_buff);
-
-          if (strncmp(token, "HTTP/1.1", 8) == 0) {
-              /*if(strncmp(filepath, "/", 1) == 0)  strcpy(path+strlen(pwd), "/index.html");
-              else */ strcpy(path+strlen(pwd), filepath);
+      if ( strncmp(request_method, "GET\0", 4)==0 ){
+          strcpy(path+strlen(pwd), filepath);
               if( (file=fopen(path, "r"))){
 
-                  fseek(file, 0L, SEEK_END);
-                  int size = ftell(file);
-                  fseek(file, 0L, SEEK_SET);
-
+                  int size = count_file_length(file);
                   sprintf(str, "Content-Length: %d\n", size);
                   write (s, "HTTP/1.1 200 OK\n", 16);
                   // write (s, "Date: Mon, 27 Jul 2009 12:28:53 GMT\n", 36);
@@ -76,9 +80,7 @@ int service_client_socket (const int s, const char *const tag) {
                   strcpy(path+strlen(pwd), "/notfound.html");
                   file=fopen(path, "r");
 
-                  fseek(file, 0L, SEEK_END);
-                  int size = ftell(file);
-                  fseek(file, 0L, SEEK_SET);
+                  int size = count_file_length(file);
 
                   sprintf(str, "Content-Length: %d\n", size);
                   write(s, "HTTP/1.1 404 Not Found\n", 23);
@@ -91,27 +93,15 @@ int service_client_socket (const int s, const char *const tag) {
                       write(s, buff, bytes2);
                   }
                   fclose(file);
-
               }
-          } else {
-              strcpy(path+strlen(pwd), "/badrequest.html");
-              bad_request(s, path);
-          }
       }
-      else if ( strncmp(token, "HEAD\0", 5)==0 ){
-          char* filepath = strtok_r(NULL, " \t\n", &temp_buff);
-          token = strtok_r(NULL, " \t\n", &temp_buff);
+      else if ( strncmp(request_method, "HEAD\0", 5)==0 ){
 
-          if (strncmp(token, "HTTP/1.1", 8) == 0) {
-
-              /*if(strncmp(filepath, "/", 1) == 0)  strcpy(path+strlen(pwd), "/index.html");
-              else */ strcpy(path+strlen(pwd), filepath);
+              strcpy(path+strlen(pwd), filepath);
 
               if( (file=fopen(path, "r"))){
 
-                  fseek(file, 0L, SEEK_END);
-                  int size = ftell(file);
-                  fseek(file, 0L, SEEK_SET);
+                  int size = count_file_length(file);
 
                   sprintf(str, "Content-Length: %d\n", size);
                   write (s, "HTTP/1.1 200 OK\n", 16);
@@ -123,16 +113,9 @@ int service_client_socket (const int s, const char *const tag) {
               }
               else
                   write(s, "HTTP/1.1 404 Not Found\n\n", 24);
-          } else {
-              strcpy(path+strlen(pwd), "/badrequest.html");
-              bad_request(s, path);
-          }
       }
-      else if ( strncmp(token, "OPTIONS\0", 5)==0 ){
-          char* filepath = strtok_r(NULL, " \t\n", &temp_buff);
-          token = strtok_r(NULL, " \t\n", &temp_buff);
+      else if ( strncmp(request_method, "OPTIONS\0", 5)==0 ){
 
-          if (strncmp(token, "HTTP/1.1", 8) == 0) {
 
               if( strncmp(filepath, "*", 1) == 0 || strncmp(filepath, "/", 1) == 0){
 
@@ -144,17 +127,10 @@ int service_client_socket (const int s, const char *const tag) {
               }
               else
                   write(s, "HTTP/1.1 404 Not Found\n\n", 24);
-          } else {
-              strcpy(path+strlen(pwd), "/badrequest.html");
-              bad_request(s, path);
-          }
       }
 
-      else if ( strncmp(token, "TRACE\0", 6)==0 ){
-          strtok_r(NULL, " \t\n", &temp_buff);
-          token = strtok_r(NULL, " \t\n", &temp_buff);
+      else if ( strncmp(request_method, "TRACE\0", 6)==0 ){
 
-          if (strncmp(token, "HTTP/1.1", 8) == 0) {
                   sprintf(str, "Content-Length: %d\n", content_size(strings, amount)+amount*2+2);
                   write (s, "HTTP/1.1 200 OK\n", 16);
                   // write (s, "Date: Mon, 27 Jul 2009 12:28:53 GMT\n", 36);
@@ -166,36 +142,57 @@ int service_client_socket (const int s, const char *const tag) {
               }
               write(s, "\r\n", 2);
 
-          } else {
-              strcpy(path+strlen(pwd), "/badrequest.html");
-              bad_request(s, path);
-          }
-      }  else if( strncmp(token, "POST\0", 5)==0 ) {
-          strtok_r(NULL, " \t\n", &temp_buff);
-          token = strtok_r(NULL, " \t\n", &temp_buff);
+      }  else if( strncmp(request_method, "POST\0", 5)==0 ) {
 
-          if (strncmp(token, "HTTP/1.1", 8) == 0) {
               int length = find_content_length(strings, amount);
               if(length <= buffer_size) {
                   char *content = malloc(sizeof(char)*(length+1));
                   content[length] = '\0';
                   read(s, content, length);
+                  printf("%s\n", content);
                   strcpy(path+strlen(pwd), "/");
                   strcpy(path+strlen(pwd)+1, tag);
                   strcpy(path+strlen(pwd)+1+strlen(tag), ".txt");
-                  FILE *file = fopen(path ,"a");
+                  FILE *file = fopen(path ,"w");
                   if(file) {
                       fwrite(content, 1, strlen(content), file);
                   }
                   fclose(file);
+
+                  file = fopen(path ,"r");
+                  int size = count_file_length(file);
+
+                  strcpy(path+strlen(pwd), "/begin.html\0");
+                  FILE *file1 = fopen(path ,"r");
+                  size+=count_file_length(file1);
+
+                  strcpy(path+strlen(pwd), "/past.html\0");
+                  FILE *file2 = fopen(path ,"r");
+                  size+=count_file_length(file2);
+
+
+
+                  sprintf(str, "Content-Length: %d\n", size);
+                  write (s, "HTTP/1.1 200 OK\n", 16);
+                  // write (s, "Date: Mon, 27 Jul 2009 12:28:53 GMT\n", 36);
+                  write (s, str, strlen(str));
+                  write (s, "Content-Type: text/html\n", 24);
+                  write (s, "Connection: Closed\n\n", 20);
+
+                  bytes2=fread(buff, 1, buffer_size-1, file1);
+                  write(s, buff, bytes2);
+                  bytes2=fread(buff, 1, buffer_size-1, file);
+                  write(s, buff, bytes2);
+                  bytes2=fread(buff, 1, buffer_size-1, file2);
+                  write(s, buff, bytes2);
+
+                  fclose(file);
+                  fclose(file2);
+                  fclose(file1);
               } else {
                   // TODO write file too large
               }
 
-          } else {
-              strcpy(path+strlen(pwd), "/badrequest.html");
-              bad_request(s, path);
-          }
       }
 
       // setting other memory to 0 for other fetchings
@@ -203,9 +200,15 @@ int service_client_socket (const int s, const char *const tag) {
 
   }
 
+  free_memory(strings, amount);
   printf ("connection from %s closed\n", tag);
   close (s);
   return 0;
+}
+
+
+void service_get_request(const int s, char *path){
+
 }
 
 void bad_request(const int s, char *path){
@@ -214,9 +217,7 @@ void bad_request(const int s, char *path){
     FILE *file = fopen(path, "r");
 
     // check the size of the file
-    fseek(file, 0L, SEEK_END);
-    int size = ftell(file);
-    fseek(file, 0L, SEEK_SET);
+    int size = count_file_length(file);
 
     // allocate the right amount of the size
     char *str = malloc(sizeof(char)*(size+1));
@@ -251,115 +252,21 @@ int content_size(char **strings, int s){
 }
 
 
-int readHeaders(const int sock, char ***strings_ptr) {
-    int arrSize = 20;
-    int buffSize = 20;
-    char **str = *strings_ptr;
-
-    // buffer for a single string
-    char *buffer;
-
-    // number of strings
-    int s =0;
-
-    // single char for reading input char by char
-    char *c = malloc(sizeof(char));
-    int check = read(sock, c, 1);
-
-    // reading input until it is available
-
-    while(check>0) {
-
-
-        // keeping track of the number of chars in a singles string
-        int i=0;
-        buffSize = 30;
-
-
-        int count_ends = 0;
-        while(*c == '\n' || *c == '\r'){
-            if(*c== '\n') count_ends++;
-            if(count_ends == 2) {
-                goto out;
-            }
-            read(sock, c, 1);
-        }
-
-        // allocating memory for a single string
-        buffer = (char *) malloc (buffSize * sizeof(char));
-
-        // if the character exists and it is not endline character
-        // we add it to the string
-        while(check >0 && *c != '\n' && *c != '\r'){
-
-            if( buffSize-i <= 1 ){
-                buffSize*=2;
-                char *tempBuff = buffer;
-                buffer = realloc(buffer, buffSize * sizeof(char*));
-                if (buffer == NULL) {
-                    free(c);
-                    free(tempBuff);
-                    freeMemory(str, s);
-                    return -1;
-                }
-            }
-
-            buffer[i] = *c;
-            i++;
-            check = read(sock, c, 1);
-        }
-
-
-        if( arrSize-s <= 1 ){
-            arrSize*=2;
-            char **tempBuff = str;
-            str = realloc(str,arrSize * sizeof(char*));
-            if (str == NULL) {
-                free(c);
-                free(buffer);
-                freeMemory(tempBuff, s);
-                return -1;
-            }
-        }
-
-        // if the string is empty, we reached the end, so terminate
-        if(check < 0 || strncmp(buffer, "\r\n\r\n", 4) == 0 || strncmp(buffer, "\n\n", 2) == 0 ) {
-            break;
-        } else {
-            buffer[i] = '\0';
-            // add the string to the string array, and increment the string counter
-            str[s] = buffer;
-            s++;
-        }
-    }
-    out:
-    // free the single char
-    free(c);
-
-    *strings_ptr = str;
-
-    // return the size of the array
-    return s;
-
-}
-
-
 int find_content_length(char **strings, int s){
     for(int i=0; i<s; i++){
         if(strncmp("Content-Length: ", strings[i],16) == 0){
             char* word = strings[i];
             return atoi(word+16);
-
         }
     }
     return 0;
 }
 
-// freeMemory free's all the strings
-void freeMemory(char **str, int s) {
 
-    for(int i=0; i<s; i++){
-        free(str[i]);
-    }
-    free(str);
+int count_file_length(FILE *file){
+    fseek(file, 0L, SEEK_END);
+    int size = ftell(file);
+    fseek(file, 0L, SEEK_SET);
+    return size;
 }
+

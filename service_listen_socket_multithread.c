@@ -6,7 +6,7 @@
 
 #include <memory.h>
 #include <string.h>
-
+#include <libpq-fe.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -23,6 +23,7 @@ typedef struct thread_control_block {
   int client;
   struct sockaddr_in6 their_address;
   socklen_t their_address_size;
+  PGconn *conn;
 } thread_control_block_t;
 
 
@@ -37,14 +38,13 @@ static void
   printable = make_printable_address (&(tcb_p->their_address),
 				      tcb_p->their_address_size,
 				      buffer, sizeof (buffer));
-  (void) service_client_socket (tcb_p->client, printable);
+  (void) service_client_socket (tcb_p->client, printable, tcb_p->conn);
   free (printable);		/* this was strdup'd */
   free (data);			/* this was malloc'd */
   pthread_exit (0);
 }
 
-int
-service_listen_socket (const int s) {
+int service_listen_socket_multithread (const int s,  PGconn *conn) {
   /* accept takes a socket in the listening state, and waits until a
      connection arrives.  It returns the new connection, and updates the
      address structure and length (if supplied) with the address of the
@@ -70,6 +70,7 @@ service_listen_socket (const int s) {
       exit (1);
     }
 
+    tcb_p->conn = conn;
     tcb_p->their_address_size = sizeof (tcb_p->their_address);
 
     /* we call accept as before, except we now put the data into the
