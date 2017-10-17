@@ -23,7 +23,6 @@ typedef struct thread_control_block {
   int client;
   struct sockaddr_in6 their_address;
   socklen_t their_address_size;
-  PGconn *conn;
 } thread_control_block_t;
 
 
@@ -38,13 +37,14 @@ static void
   printable = make_printable_address (&(tcb_p->their_address),
 				      tcb_p->their_address_size,
 				      buffer, sizeof (buffer));
-  (void) service_client_socket (tcb_p->client, printable, tcb_p->conn);
+  (void) service_client_socket (tcb_p->client, printable);
+  close(tcb_p->client);
   free (printable);		/* this was strdup'd */
   free (data);			/* this was malloc'd */
   pthread_exit (0);
 }
 
-int service_listen_socket_multithread (const int s,  PGconn *conn) {
+int service_listen_socket_multithread (const int s) {
   /* accept takes a socket in the listening state, and waits until a
      connection arrives.  It returns the new connection, and updates the
      address structure and length (if supplied) with the address of the
@@ -70,7 +70,6 @@ int service_listen_socket_multithread (const int s,  PGconn *conn) {
       exit (1);
     }
 
-    tcb_p->conn = conn;
     tcb_p->their_address_size = sizeof (tcb_p->their_address);
 
     /* we call accept as before, except we now put the data into the
@@ -82,6 +81,7 @@ int service_listen_socket_multithread (const int s,  PGconn *conn) {
       /* may as well carry on, this is probably temporary */
     } else {
       pthread_t thread;
+      pthread_attr_t pthread_attr; /* attributes for newly created thread */
       /* [1]...we now create a thread and start it by calling
 	 client_thread with the tcb_p pointer.  That data was malloc'd,
 	 so is safe to use.  If we just have a structure on our own
@@ -89,8 +89,18 @@ int service_listen_socket_multithread (const int s,  PGconn *conn) {
 	 pointer to that, then there would be some exciting race
 	 conditions as it was destroyed (or not) before the created
 	 thread finished using it. */
-    
-      if (pthread_create (&thread, 0, &client_thread, (void *) tcb_p) != 0) {
+        /* create separate thread for processing */
+        if (pthread_attr_init (&pthread_attr)) {
+            fprintf (stderr, "Creating initial thread attributes failed!\n");
+            exit (1);
+        }
+
+        if (pthread_attr_setdetachstate (&pthread_attr, PTHREAD_CREATE_DETACHED)) {
+            fprintf (stderr, "setting thread attributes failed!\n");
+            exit (1);
+        }
+
+      if (pthread_create (&thread, &pthread_attr, &client_thread, (void *) tcb_p) != 0) {
 	perror ("pthread_create");
 	goto error_exit;	/* avoid break here in of the later
 				   addition of an enclosing loop */

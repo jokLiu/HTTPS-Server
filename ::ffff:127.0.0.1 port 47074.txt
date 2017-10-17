@@ -1,8 +1,0 @@
------------------------------110424018419582848951523871735
-Content-Disposition: form-data; name="myfile"; filename="in3.txt"
-Content-Type: text/plain
-
-foo
-bar
-
------------------------------110424018419582848951523871735--
