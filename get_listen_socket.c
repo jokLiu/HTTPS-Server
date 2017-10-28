@@ -3,20 +3,70 @@
 #include <unistd.h>
 #include <errno.h>
 #include <sys/types.h>
-
 #include <memory.h>
 #include <string.h>
-
 #include <sys/socket.h>
 #include <netinet/in.h>
-
+#include <openssl/ssl.h>
+#include <openssl/err.h>
 #include <assert.h>
 
-#include "service_listen_socket.h"
+/* initialise the openSSL */
+void init_openssl()
+{
+    SSL_load_error_strings();
+    SSL_library_init();
+    OpenSSL_add_ssl_algorithms();
+}
+
+/* do the cleanup when server exits */
+void cleanup_openssl()
+{
+    ERR_free_strings();
+    EVP_cleanup();
+}
+
+/* create the SSL context to work
+   for a server */
+SSL_CTX *create_context()
+{
+    const SSL_METHOD *method;
+    SSL_CTX *ctx;
+
+    method = SSLv23_server_method();
+
+    ctx = SSL_CTX_new(method);
+    if (!ctx) {
+        perror("Unable to create SSL context");
+        ERR_print_errors_fp(stderr);
+        exit(EXIT_FAILURE);
+    }
+
+    return ctx;
+}
+
+/* configure the context with correct certificate and key */
+void configure_context(SSL_CTX *ctx)
+{
+
+    SSL_CTX_set_options(ctx, SSL_OP_SINGLE_DH_USE);
+
+    /* Set the key and cert */
+    if (SSL_CTX_use_certificate_file(ctx, "cert.pem", SSL_FILETYPE_PEM) <= 0) {
+        ERR_print_errors_fp(stderr);
+    }
+
+    if (SSL_CTX_use_PrivateKey_file(ctx, "key.pem", SSL_FILETYPE_PEM) <= 0 ) {
+        ERR_print_errors_fp(stderr);
+    }
+
+    if (!SSL_CTX_check_private_key(ctx)) {
+        ERR_print_errors_fp(stderr);
+    }
+}
 
 
-int
-get_listen_socket(const int port) {
+int get_listen_socket(const int port) {
     fprintf(stderr, "binding  to port %d\n", port);
     struct sockaddr_in6 my_address;
 

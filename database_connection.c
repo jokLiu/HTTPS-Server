@@ -8,27 +8,31 @@
 
 /* pages defines the web page files to be displayed for the client.
  * These web pages are loaded to the database when server is started. */
-#define pages (char*[14]){"versionnotsupported.html\0",\
+#define pages (char*[16]){"versionnotsupported.html\0",\
 "badrequest.html\0", "begin.html\0","brum.html\0" , \
 "end.html\0", "index.html\0",\
 "notfound.html\0","past.html\0", "profile.html\0", \
  "random.html\0", "uni.html\0", "upload.html\0", \
-"internalerror.html\0", "file_too_large.html\0"}
+"internalerror.html\0", "file_too_large.html\0", \
+"redirect.html\0", "filenotuploaded.html\0"}
 
 
 /* close the database connection */
-void do_exit() {
+void do_exit(PGconn *db_connection) {
     PQfinish(db_connection);
 }
 
 /* create a database connection to the webserver */
-void create_connection() {
-    db_connection = PQconnectdb("user=webserver "\
+
+PGconn *create_connection() {
+
+    PGconn *db_connection = PQconnectdb("user=webserver "\
             "password=webserver dbname=webserver");
+    return db_connection;
 }
 
 /* creating table if one is not already present from previous runs */
-PGresult *create_table() {
+PGresult *create_table(PGconn *db_connection) {
     PGresult *res = PQexec(db_connection, "CREATE TABLE IF NOT EXISTS Records(Name VARCHAR(100) PRIMARY KEY," \
         " Data TEXT )");
     return res;
@@ -37,13 +41,12 @@ PGresult *create_table() {
 
 /* populate table inserts data into the table or
  * updates the current record if one already exists with the specific name */
-PGresult *populate_table(char *id, char *data) {
+PGresult *populate_table(PGconn *db_connection,char *id, char *data) {
     // TODO fix!!!!!!!
     char *escaped_str = PQescapeLiteral(db_connection, data, strlen(data));
-    printf("%s\t%zu\n", escaped_str, strlen(escaped_str));
     char *str = calloc((strlen(id) + strlen(escaped_str) + 91), sizeof(char));
 
-    sprintf(str, "INSERT INTO Records VALUES( '%s' , '%s' ) ON CONFLICT " \
+    sprintf(str, "INSERT INTO Records VALUES( '%s' , %s ) ON CONFLICT " \
      "(Name) DO UPDATE SET Data = excluded.Data", id, escaped_str);
 
 
@@ -65,7 +68,7 @@ PGresult *populate_table(char *id, char *data) {
 }
 
 /* querying the table to retrieve the data based on the key */
-PGresult *query_table(char *id) {
+PGresult *query_table(PGconn *db_connection,char *id) {
     char *str = calloc((strlen(id) + 41), sizeof(char));
 
     sprintf(str, "SELECT Data FROM Records WHERE Name = '%s'", id);
@@ -87,7 +90,7 @@ PGresult *query_table(char *id) {
 }
 
 /* loading files to the database when server is started*/
-void load_files_content() {
+void load_files_content(PGconn *db_connection) {
 
     /* specifying the path where the files are located */
     char *path = calloc(100, sizeof(char));
@@ -100,7 +103,7 @@ void load_files_content() {
     // TODO finish commenting and check errors
     // int bytes;
     PGresult *res;
-    for (int i = 0; i < 14; i++) {
+    for (int i = 0; i < 16; i++) {
         strcpy(path + 6, pages[i]);
         file = fopen(path, "r");
         if (!file) continue;
@@ -109,7 +112,7 @@ void load_files_content() {
         content = calloc(size + 1, sizeof(char));
         /*bytes=*/fread(content, 1, size, file);
 
-        res = populate_table(pages[i], content);
+        res = populate_table(db_connection,pages[i], content);
         clear_result(res);
         free(content);
     }
@@ -120,7 +123,7 @@ void load_files_content() {
 
 /* deleting the row from records when it is no longer necessary
  * in order to keep it clean */
-PGresult *delete_row(char *id) {
+PGresult *delete_row(PGconn *db_connection,char *id) {
     char *str = calloc((strlen(id) + 37), sizeof(char));
     sprintf(str, "DELETE FROM Records WHERE Name = '%s'", id);
 
@@ -150,7 +153,7 @@ void clear_result(PGresult *res) {
 
 /* checking whether the table contains certain record
  * returns 1 for true and 0 for false */
-int check_exists(char *id) {
+int check_exists(PGconn *db_connection, char *id) {
     char *str = calloc((strlen(id) + 53), sizeof(char));
     sprintf(str, "SELECT EXISTS(SELECT 1 FROM Records WHERE Name = '%s')", id);
 

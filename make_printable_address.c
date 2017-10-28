@@ -4,8 +4,10 @@
 #include <netinet/in.h>
 #include <assert.h>
 
-char *
-make_printable_address(const struct sockaddr_in6 *const addr,
+/* make the client connection address to be printable and human readable.
+   this can be used to identify a client among all the currently active
+   connections */
+char *make_printable_address(const struct sockaddr_in6 *const addr,
                        const socklen_t addr_len,
                        char *const buffer,
                        const size_t buffer_size) {

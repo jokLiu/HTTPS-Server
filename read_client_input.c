@@ -1,30 +1,32 @@
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <errno.h>
 #include <sys/types.h>
-
 #include <memory.h>
 #include <string.h>
-
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
-
+#include <openssl/ssl.h>
+#include <openssl/err.h>
 #include <assert.h>
 #include "read_client_input.h"
 
+
+int read_input(const int sock, SSL *ssl, char *buffer, int size);
+
 /* reading input coming from the client via
- * the socket provided until input is available
- * or the end of the header is reached */
-int read_client_input(const int sock, char ***strings_ptr) {
+   the socket provided until input is available
+   or the end of the header is reached */
+int read_client_input(SSL *ssl, char ***strings_ptr) {
     /* initial size of the string array */
     int arr_size = 20;
 
     /* initial size of the single line */
     int buff_size = 30;
 
+    /* we write to our string array */
     char **str = *strings_ptr;
 
     /* buffer for the single line input */
@@ -37,10 +39,10 @@ int read_client_input(const int sock, char ***strings_ptr) {
     char *c = malloc(sizeof(char));
 
     /* reading single character from socket */
-    int check = read(sock, c, 1);
+    int check = SSL_read(ssl, c, 1);
 
     /* reading input until it is available
-     * or end of the header sis reached */
+       or end of the header sis reached */
     while (check > 0) {
 
         /* keeping track of the number of chars in a singles string */
@@ -50,27 +52,26 @@ int read_client_input(const int sock, char ***strings_ptr) {
         buff_size = 30;
 
         /* checking whether the end of the header is reached
-         * i.e. \r\n\r\n can be found
-         * if so return */
+           i.e. \r\n\r\n can be found if so return */
         int count_ends = 0;
         while (*c == '\n' || *c == '\r') {
             if (*c == '\n') count_ends++;
             if (count_ends == 2) {
                 goto out;
             }
-            read(sock, c, 1);
+            SSL_read(ssl, c, 1);
         }
 
         /* allocating memory for a single string */
         buffer = (char *) malloc(buff_size * sizeof(char));
 
         /* if the character exists and it is not endline character
-         * we add it to the string */
+           we add it to the string */
         while (check > 0 && *c != '\n' && *c != '\r') {
 
             /* we check if the current buffer size is not too small
-             * and is not going to be overfilled by the next char
-             * if so we reallocate it */
+               and is not going to be overfilled by the next char
+               if so we reallocate it */
             if (buff_size - i <= 1) {
                 buff_size *= 2;
                 char *tempBuff = buffer;
@@ -86,13 +87,13 @@ int read_client_input(const int sock, char ***strings_ptr) {
             /* adding the character to buffer */
             buffer[i] = *c;
             i++;
-            check = read(sock, c, 1);
+            check = SSL_read(ssl, c, 1);
         }
 
         /* we check if the current strings size  is not too small
-        * and is not going to be overfilled by the next string
-        * if so we reallocate it */
-        if (arr_size - s <= 1) {
+           and is not going to be overfilled by the next string
+           if so we reallocate it */
+        if (arr_size - strings_size <= 1) {
             arr_size *= 2;
             char **tempBuff = str;
             str = realloc(str, arr_size * sizeof(char *));
@@ -106,10 +107,10 @@ int read_client_input(const int sock, char ***strings_ptr) {
 
         /* adding terminating byte */
         buffer[i] = '\0';
-        printf("%s\n", buffer);
+
         /* add the string to the string array
-         * and increment the string counter */
-        str[s] = buffer;
+           and increment the string counter */
+        str[strings_size] = buffer;
         strings_size++;
     }
     out:
@@ -126,14 +127,15 @@ int read_client_input(const int sock, char ***strings_ptr) {
 }
 
 
-/* free memory of strings inside the array string */
+/* free memory of strings inside the array of strings
+   but leave the main array not free'd */
 void free_memory_inside(char **str, int s) {
     for (int i = 0; i < s; i++) {
         free(str[i]);
     }
 }
 
-/* free all the memory allocated */
+/* free all the memory allocated including the main pointer to strings */
 void free_memory(char **str, int s) {
     free_memory_inside(str, s);
     free(str);

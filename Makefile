@@ -1,11 +1,7 @@
-hosts=mail.batten.eu.org pi-one.home.batten.eu.org gromit.cs.bham.ac.uk offsite8.batten.eu.org offsite9.batten.eu.org
-
 OS=$(shell uname -s)
-ZIP=socket
 
 CFLAGS=-Wall -Werror -std=gnu99 -g -I/usr/include/postgresql
-# needlessly included for single-thread case: hardly a crime
-LIBS=-lpthread -lpq
+LIBS=-lpthread -lpq -lssl -lcrypto
 ifeq ($(OS), SunOS)
   LIBS+= -lsocket -lnsl
 endif

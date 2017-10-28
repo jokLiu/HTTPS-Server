@@ -1,26 +1,24 @@
 
-PGconn *db_connection;
 
 /* the lock */
 pthread_mutex_t mut;
 
+void do_exit(PGconn *db_connection);
 
-void do_exit();
+PGconn *create_connection();
 
-void create_connection();
+PGresult *create_table(PGconn *db_connection);
 
-PGresult *create_table();
+PGresult *populate_table(PGconn *db_connection, char *id, char *data);
 
-PGresult *populate_table(char *id, char *data);
-
-PGresult *query_table(char *id);
+PGresult *query_table(PGconn *db_connection, char *id);
 
 char *get_result_content(PGresult *res);
 
 void clear_result(PGresult *res);
 
-void load_files_content();
+void load_files_content(PGconn *db_connection);
 
-PGresult *delete_row(char *id);
+PGresult *delete_row(PGconn *db_connection, char *id);
 
-int check_exists(char *id);
+int check_exists(PGconn *db_connection, char *id);
