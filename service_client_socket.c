@@ -16,14 +16,14 @@
 #include "service_client_socket.h"
 #include "read_client_input.h"
 #include "database_connection.h"
-#include "util.h"
+#include "service_listen_socket_multithread.h"
 
 /* the maximum size of the payload received by POST request */
 #define MAX_CONTENT_SIZE 102400
 
 void write_to_client(SSL *ssl, char *message);
 
-void service_upload_file(PGconn *db_conn, SSL *ssl, char *tag);
+int service_upload_file(PGconn *db_conn, SSL *ssl, char *tag);
 
 
 /* the main function for serving a single client.
@@ -33,14 +33,14 @@ void service_upload_file(PGconn *db_conn, SSL *ssl, char *tag);
    GET,HEAD,POST,OPTIONS,TRACE. */
 int service_client_socket(const int s, SSL *ssl, const char *const tag) {
     printf("new connection from %s\n", tag);
+    PGconn *db_conn = create_connection();
+    if(!db_conn) return -1;
 
     /* allocating array of pointers to the strings
        the strings are going to store all the data received from client.
        Each string represents a line from the request. */
     int initial_array_size = 20;
     char **strings = malloc(initial_array_size * sizeof(char *));
-
-    PGconn *db_conn = create_connection();
 
     /* buffers used for the header parsing */
     char *buffer;
@@ -104,35 +104,35 @@ int service_client_socket(const int s, SSL *ssl, const char *const tag) {
 
         /* if we received GET request, we handle it accordingly */
         if (strncmp(request_method, "GET\0", 4) == 0) {
-
             /* if the requested page exists, serve it */
             if (check_exists(db_conn,filepath) == 1) {
-                service_get_request(db_conn, ssl, filepath);
+                if(service_get_request(db_conn, ssl, filepath) != 0) break;
             }
                 /* if a client requests getfile, it means a client
                    wants to retrieve his file he stored with POST method */
             else if (strcmp(filepath, "getfile\0") == 0) {
                 if (check_exists(db_conn,strdup(tag_name)) == 1) {
-                    service_upload_file(db_conn, ssl, tag_name);
+                    if(service_upload_file(db_conn, ssl, tag_name) != 0) break;
                 }
                     /* if client haven't stored file, serve the appropriate page */
-                else service_get_request(db_conn, ssl, "filenotuploaded.html");
+                else {
+                    if(service_get_request(db_conn, ssl, "filenotuploaded.html")  != 0) break;
+                }
             }
                 /* in any other cases indicate page not found */
             else {
-                service_not_found(db_conn, ssl, "HTTP/1.1 404 Not Found\r\n", "notfound.html");
+                if(service_not_found(db_conn, ssl, "HTTP/1.1 404 Not Found\r\n", "notfound.html")  != 0) return -1;
             }
         }
             /* if we received HEAD request, we handle it accordingly */
         else if (strncmp(request_method, "HEAD\0", 5) == 0) {
             /* if the requested page exists, respond */
             if (check_exists(db_conn,filepath) == 1) {
-                service_head_request(db_conn, ssl, filepath);
-
+                if(service_head_request(db_conn, ssl, filepath) != 0) break;
             }
                 /* in any other cases indicate page not found */
             else {
-                service_not_found(db_conn, ssl, "HTTP/1.1 404 Not Found\r\n", "notfound.html");
+                if(service_not_found(db_conn, ssl, "HTTP/1.1 404 Not Found\r\n", "notfound.html") != 0) return -1;;
             }
         }
             /* if we received OPTIONS request, we handle it accordingly */
@@ -153,7 +153,7 @@ int service_client_socket(const int s, SSL *ssl, const char *const tag) {
             /* if the size is too large it we respond
                to the client with code 413 */
             if (length <= MAX_CONTENT_SIZE) {
-                service_post_request(db_conn, ssl, length, tag_name);
+                if(service_post_request(db_conn, ssl, length, tag_name)  != 0) break;
             } else {
 
                 char *c = "";
@@ -161,7 +161,7 @@ int service_client_socket(const int s, SSL *ssl, const char *const tag) {
                 recv(s, c, length, MSG_TRUNC);
 
                 /* indicate violated conditions to the client */
-                service_not_found(db_conn, ssl, "HTTP/1.1 413 Payload Too Large\r\n", "file_too_large.html");
+                if(service_not_found(db_conn, ssl, "HTTP/1.1 413 Payload Too Large\r\n", "file_too_large.html") != 0) return -1;
             }
 
         }
@@ -179,11 +179,7 @@ int service_client_socket(const int s, SSL *ssl, const char *const tag) {
     do_exit(db_conn);
 
     /* fre'ing the allocated memory */
-    free_memory(strings, amount);
-
-    /* closing the SSL connection and socket */
-    SSL_free(ssl);
-    close(s);
+    free_main_string(strings);
     free(tag_name);
 
 
@@ -193,7 +189,7 @@ int service_client_socket(const int s, SSL *ssl, const char *const tag) {
 }
 
 /* serving the POST request based on the request received */
-void service_post_request(PGconn *db_conn, SSL* ssl, int length, char *tag) {
+int service_post_request(PGconn *db_conn, SSL* ssl, int length, char *tag) {
 
     /* allocate the right amount for storing the payload
        received from client, and then read it into buffer */
@@ -208,17 +204,19 @@ void service_post_request(PGconn *db_conn, SSL* ssl, int length, char *tag) {
     PGresult *res = populate_table(db_conn,tag, real_content);
 
     /* send the response the the POST method */
-    service_upload_file(db_conn, ssl, tag);
+    int ret = service_upload_file(db_conn, ssl, tag);
 
     /* cleanup */
     clear_result(res);
     free(content);
+
+    return ret;
 }
 
 /* function for sending a client the content he uploaded using the
    POST method, it also embeds the content into html for the
    better visual representation and alignment */
-void service_upload_file(PGconn *db_conn,SSL *ssl, char *tag) {
+int service_upload_file(PGconn *db_conn,SSL *ssl, char *tag) {
     /* string for storing the content length HTTP token */
     char *str = malloc(sizeof(char) * 40);
 
@@ -227,7 +225,7 @@ void service_upload_file(PGconn *db_conn,SSL *ssl, char *tag) {
     char *uploaded_content = get_result_content(result1);
     if (!uploaded_content) {
         service_not_found(db_conn, ssl, "HTTP/1.1 500 Internal Server Error\r\n", "internalerror.html");
-        return;
+        return -1;
     }
 
     /* retrieve the head of the html for serving to the client */
@@ -235,7 +233,7 @@ void service_upload_file(PGconn *db_conn,SSL *ssl, char *tag) {
     char *begin = get_result_content(result2);
     if (!begin) {
         service_not_found(db_conn, ssl, "HTTP/1.1 500 Internal Server Error\r\n", "internalerror.html");
-        return;
+        return -1;
     }
 
     /* retrieve the end of the html for serving to client */
@@ -243,7 +241,7 @@ void service_upload_file(PGconn *db_conn,SSL *ssl, char *tag) {
     char *past = get_result_content(result3);
     if (!past) {
         service_not_found(db_conn, ssl, "HTTP/1.1 500 Internal Server Error\r\n", "internalerror.html");
-        return;
+        return -1;
     }
 
     /* calculate the total size of the payload */
@@ -269,6 +267,8 @@ void service_upload_file(PGconn *db_conn,SSL *ssl, char *tag) {
     clear_result(result2);
     clear_result(result3);
     free(str);
+
+    return 0;
 }
 
 /* serving the OPTIONS request based on the request received */
@@ -305,7 +305,7 @@ void service_options_request(PGconn *db_conn, SSL *ssl, char *path) {
 
 
 /* serving the GET request based on the request received */
-void service_get_request(PGconn *db_conn, SSL *ssl, char *path) {
+int service_get_request(PGconn *db_conn, SSL *ssl, char *path) {
     /* string for storing the content length HTTP token */
     char *str = malloc(sizeof(char) * 40);
 
@@ -313,11 +313,12 @@ void service_get_request(PGconn *db_conn, SSL *ssl, char *path) {
     PGresult *res = query_table(db_conn, path);
     char *buffer = get_result_content(res);
 
+    printf("%s\n",  PQresStatus(PQresultStatus(res)));
     /* if we failed to retrieve the page, we are in trouble
        and we indicate that server had an internal error */
     if (!buffer) {
         service_not_found(db_conn, ssl, "HTTP/1.1 500 Internal Server Error\r\n", "internalerror.html");
-        return;
+        return -1;
     }
 
     /* write header to the client */
@@ -334,11 +335,12 @@ void service_get_request(PGconn *db_conn, SSL *ssl, char *path) {
     /* cleanup */
     clear_result(res);
     free(str);
+    return 0;
 
 }
 
 /* serving the GET request based on the request received */
-void service_head_request(PGconn *db_conn,SSL *ssl, char *path) {
+int service_head_request(PGconn *db_conn,SSL *ssl, char *path) {
     /* string for storing the content length HTTP token */
     char *str = malloc(sizeof(char) * 40);
 
@@ -350,7 +352,7 @@ void service_head_request(PGconn *db_conn,SSL *ssl, char *path) {
        and we indicate that server had an internal error */
     if (!buffer) {
         service_not_found(db_conn, ssl, "HTTP/1.1 500 Internal Server Error\r\n", "internalerror.html");
-        return;
+        return -1;
     }
 
     /* write header to the client */
@@ -364,11 +366,13 @@ void service_head_request(PGconn *db_conn,SSL *ssl, char *path) {
     /* cleanup */
     clear_result(res);
     free(str);
+
+    return 0;
 }
 
 /* function for responding to the client with an appropriate message
    and page when client tried to retrieve data which is not available */
-void service_not_found(PGconn *db_conn,SSL *ssl, char *message, char *page) {
+int service_not_found(PGconn *db_conn,SSL *ssl, char *message, char *page) {
     /* string for storing the content length HTTP token */
     char *str = malloc(sizeof(char) * 40);
 
@@ -380,7 +384,7 @@ void service_not_found(PGconn *db_conn,SSL *ssl, char *message, char *page) {
        and we indicate that server had an internal error */
     if (!buffer) {
         service_not_found(db_conn, ssl, "HTTP/1.1 500 Internal Server Error\r\n", "internalerror.html");
-        return;
+        return -1;
     }
 
     /* write header to the client */
@@ -395,6 +399,7 @@ void service_not_found(PGconn *db_conn,SSL *ssl, char *message, char *page) {
     /* cleanup */
     clear_result(res);
     free(str);
+    return 0;
 }
 
 
@@ -428,31 +433,44 @@ void redirect_http_to_https(const int s) {
     PGconn *db_conn = create_connection();
 
     /* string for storing the content length HTTP token */
-    char *str = malloc(sizeof(char) * 40);
+    char *str = calloc(sizeof(char) * 500, 1);
+    char *web_page = calloc(sizeof(char) * 500, 1);
 
     /* query table to retrieve the requested page */
     PGresult *res = query_table(db_conn, "redirect.html");
     char *buffer = get_result_content(res);
-
-    sprintf(str, "Content-Length: %zu\r\n", strlen(buffer));
+    if (!buffer) {
+        return;
+    }
+    /* we retrieve the file and set host and port name
+       according to what server is using */
+    char* helper_buff = calloc(strlen(buffer)*2, 1);
+    strncpy(helper_buff, buffer, strlen(buffer));
+    sprintf(web_page, helper_buff, info->host, info->port, info->host, info->port);
 
     /* write header to the client */
     message = "HTTP/1.1 301 Moved Permanently\r\n";
     write(s, message, strlen(message));
-    message = "Location: https://localhost:1234\r\n";
-    write(s, message, strlen(message));
+    sprintf(str, "Location: https://%s:%s/\r\n", info->host, info->port );
+    write(s, str, strlen(str));
+    memset(str, '\0', 500);
     message = "Content-Type: text/html\r\n";
     write(s, message, strlen(message));
+    sprintf(str, "Content-Length: %zu\r\n", strlen(web_page));
     write(s, str, strlen(str));
+    memset(str, '\0', 500);
     message = "Connection: close\r\n\r\n";
     write(s, message, strlen(message));
 
+
     /* send the content of redirect page to the client */
-    write(s, buffer, strlen(buffer));
+    write(s, web_page, strlen(web_page));
 
     /* cleanup */
-    do_exit(db_conn);
     clear_result(res);
+    do_exit(db_conn);
+    free(helper_buff);
+    free(web_page);
     free(str);
 }
 

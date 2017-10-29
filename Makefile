@@ -26,5 +26,5 @@ multi_thread_server: ${common_objs} ${multi_objs}
 	${CC} -o $@ ${CFLAGS} $+ ${LDFLAGS} ${LIBS}
 
 clean:
-	rm -f ${common_objs} ${BIN} ${multi_objs} $(ZIP) *~
+	rm -f ${common_objs} ${BIN} ${multi_objs} *~
 

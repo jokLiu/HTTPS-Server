@@ -60,9 +60,6 @@ void configure_context(SSL_CTX *ctx)
         ERR_print_errors_fp(stderr);
     }
 
-    if (!SSL_CTX_check_private_key(ctx)) {
-        ERR_print_errors_fp(stderr);
-    }
 }
 
 

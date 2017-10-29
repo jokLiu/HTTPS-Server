@@ -2,19 +2,26 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <errno.h>
-
+#include <signal.h>
 #include <assert.h>
 #include <libpq-fe.h>
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 #include "get_listen_socket.h"
 #include "service_listen_socket_multithread.h"
+#include "service_client_socket.h"
 #include "database_connection.h"
+
 
 char *myname = "unknown";
 
-int
-main(int argc, char **argv) {
+
+/* singal handler to respond to the SIGPIPE and SIGSEGV
+   singals in order to avoid unpredicted crashes even
+   though none should happen. */
+void sig_handler(int signo) {}
+
+int main(int argc, char **argv) {
     int p, s;
     char *endp;
 
@@ -35,6 +42,24 @@ main(int argc, char **argv) {
         fprintf(stderr, "%s: %s is not a number\n", myname, argv[1]);
         exit(1);
     }
+
+
+
+    /* handling signals to recover from extremem conditions
+       even thought it should never happen */
+    if (signal(SIGPIPE, sig_handler) == SIG_ERR) {
+        printf("can't catch SIGPIPE\n");
+    }
+    if (signal(SIGSEGV, sig_handler) == SIG_ERR) {
+        printf("can't catch SIGSEGV\n");
+    }
+
+
+    /* we pass server info to the thread handlers
+       for the flexible redirection and response */
+    info = malloc(sizeof(server_info));
+    info->host = "127.0.0.1";
+    info->port = argv[1];
 
     /* less than 1024 you need to be root, >65535 isn't valid */
     if (p < 1024 || p > 65535) {
@@ -71,7 +96,6 @@ main(int argc, char **argv) {
     do_exit(db_connection);
 
     /* start the loop to respond to multiple connections concurrently */
-
     if (service_listen_socket_multithread(s) != 0) {
         fprintf(stderr, "%s: cannot process listen socket\n", myname);
         exit(1);

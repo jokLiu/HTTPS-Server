@@ -135,6 +135,11 @@ void free_memory_inside(char **str, int s) {
     }
 }
 
+/* free only the outside pointer to the array of strings */
+void free_main_string(char **str) {
+    free(str);
+}
+
 /* free all the memory allocated including the main pointer to strings */
 void free_memory(char **str, int s) {
     free_memory_inside(str, s);

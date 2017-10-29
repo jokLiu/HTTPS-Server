@@ -3,18 +3,9 @@
 #include <libpq-fe.h>
 #include <string.h>
 #include <pthread.h>
+#include <dirent.h>
 #include "database_connection.h"
 #include "util.h"
-
-/* pages defines the web page files to be displayed for the client.
- * These web pages are loaded to the database when server is started. */
-#define pages (char*[16]){"versionnotsupported.html\0",\
-"badrequest.html\0", "begin.html\0","brum.html\0" , \
-"end.html\0", "index.html\0",\
-"notfound.html\0","past.html\0", "profile.html\0", \
- "random.html\0", "uni.html\0", "upload.html\0", \
-"internalerror.html\0", "file_too_large.html\0", \
-"redirect.html\0", "filenotuploaded.html\0"}
 
 
 /* close the database connection */
@@ -23,7 +14,6 @@ void do_exit(PGconn *db_connection) {
 }
 
 /* create a database connection to the webserver */
-
 PGconn *create_connection() {
 
     PGconn *db_connection = PQconnectdb("user=webserver "\
@@ -33,22 +23,25 @@ PGconn *create_connection() {
 
 /* creating table if one is not already present from previous runs */
 PGresult *create_table(PGconn *db_connection) {
-    PGresult *res = PQexec(db_connection, "CREATE TABLE IF NOT EXISTS Records(Name VARCHAR(100) PRIMARY KEY," \
-        " Data TEXT )");
+    PGresult *res = PQexec(db_connection,
+        "CREATE TABLE IF NOT EXISTS Records "\
+        "(Name VARCHAR(100) PRIMARY KEY, Data TEXT )");
     return res;
 }
 
 
 /* populate table inserts data into the table or
- * updates the current record if one already exists with the specific name */
+   updates the current record if one already exists with the specific name */
 PGresult *populate_table(PGconn *db_connection,char *id, char *data) {
-    // TODO fix!!!!!!!
-    char *escaped_str = PQescapeLiteral(db_connection, data, strlen(data));
-    char *str = calloc((strlen(id) + strlen(escaped_str) + 91), sizeof(char));
 
+    /* we escape a string before putting it into a table
+       to avoid SQL injection attacks */
+    char *escaped_str = PQescapeLiteral(db_connection, data, strlen(data));
+
+    /* prepare string for storing the insert query */
+    char *str = calloc((strlen(id) + strlen(escaped_str) + 91), sizeof(char));
     sprintf(str, "INSERT INTO Records VALUES( '%s' , %s ) ON CONFLICT " \
      "(Name) DO UPDATE SET Data = excluded.Data", id, escaped_str);
-
 
     /* lock exclusive access to variable isExecuted */
     pthread_mutex_lock(&mut);
@@ -56,8 +49,6 @@ PGresult *populate_table(PGconn *db_connection,char *id, char *data) {
     /* execute the query */
     PGresult *res = PQexec(db_connection, str);
 
-    // TODO remove
-    printf("%s", PQresultErrorMessage(res));
     /* release the lock */
     pthread_mutex_unlock(&mut);
 
@@ -69,8 +60,8 @@ PGresult *populate_table(PGconn *db_connection,char *id, char *data) {
 
 /* querying the table to retrieve the data based on the key */
 PGresult *query_table(PGconn *db_connection,char *id) {
+    /* prepare string for storing the insert query */
     char *str = calloc((strlen(id) + 41), sizeof(char));
-
     sprintf(str, "SELECT Data FROM Records WHERE Name = '%s'", id);
 
     /* lock exclusive access to variable isExecuted */
@@ -78,11 +69,9 @@ PGresult *query_table(PGconn *db_connection,char *id) {
 
     /* execute the query */
     PGresult *res = PQexec(db_connection, str);
-
     /* release the lock */
     pthread_mutex_unlock(&mut);
 
-    printf("%s\n", PQresultErrorMessage(res));
 
     /* cleanup */
     free(str);
@@ -95,26 +84,58 @@ void load_files_content(PGconn *db_connection) {
     /* specifying the path where the files are located */
     char *path = calloc(100, sizeof(char));
     strcpy(path, "pages/");
+
+    /* for holding a single file during the iteration */
     FILE *file;
+
+    /* content size of the file */
     int size;
+
+    /* content of a single file */
     char *content;
 
-
-    // TODO finish commenting and check errors
-    // int bytes;
+    /* database result */
     PGresult *res;
-    for (int i = 0; i < 16; i++) {
-        strcpy(path + 6, pages[i]);
-        file = fopen(path, "r");
-        if (!file) continue;
 
-        size = count_file_length(file);
-        content = calloc(size + 1, sizeof(char));
-        /*bytes=*/fread(content, 1, size, file);
+    /* directory where files are located */
+    DIR *dir;
 
-        res = populate_table(db_connection,pages[i], content);
-        clear_result(res);
-        free(content);
+    /* struct which holds a single entry in a directory */
+    struct dirent *ent;
+
+    /* open a directory */
+    if ((dir = opendir("pages/")) != NULL) {
+        /* read all the files within directory
+           and store their content into the db table. */
+        while ((ent = readdir (dir)) != NULL) {
+
+            /* path to the file */
+            strcpy(path + 6,ent->d_name);
+
+            /* open the file */
+            file = fopen(path, "r");
+
+            /* if file failed to open or file is either '.' or '..' skip */
+            if (!file || !strncmp(ent->d_name, ".",1)) continue;
+
+            /* get the size of the file */
+            size = count_file_length(file);
+
+            /* read the content of the file */
+            content = calloc(size + 1, sizeof(char));
+            fread(content, 1, size, file);
+
+            /* insert the content to the database table */
+            res = populate_table(db_connection,ent->d_name, content);
+
+            /* cleanup */
+            clear_result(res);
+            free(content);
+        }
+        closedir (dir);
+    } else {
+        /* could not open directory */
+        perror("");
     }
 
     /* cleanup */
@@ -122,8 +143,11 @@ void load_files_content(PGconn *db_connection) {
 }
 
 /* deleting the row from records when it is no longer necessary
- * in order to keep it clean */
+   in order to keep it clean.
+   it is usually called when the client exists to remove
+   any data that was stored by the client. */
 PGresult *delete_row(PGconn *db_connection,char *id) {
+    /* prepare string for storing the insert query */
     char *str = calloc((strlen(id) + 37), sizeof(char));
     sprintf(str, "DELETE FROM Records WHERE Name = '%s'", id);
 
@@ -143,7 +167,8 @@ PGresult *delete_row(PGconn *db_connection,char *id) {
 
 /* get the content of the result */
 char *get_result_content(PGresult *res) {
-    return PQgetvalue(res, 0, 0);
+    if(PQresultStatus(res) == PGRES_TUPLES_OK) return PQgetvalue(res, 0, 0);
+    return NULL;
 }
 
 /* clearing the result */
@@ -152,8 +177,9 @@ void clear_result(PGresult *res) {
 }
 
 /* checking whether the table contains certain record
- * returns 1 for true and 0 for false */
+   returns 1 for true and 0 for false */
 int check_exists(PGconn *db_connection, char *id) {
+    /* prepare string for storing the exists query */
     char *str = calloc((strlen(id) + 53), sizeof(char));
     sprintf(str, "SELECT EXISTS(SELECT 1 FROM Records WHERE Name = '%s')", id);
 
@@ -162,15 +188,18 @@ int check_exists(PGconn *db_connection, char *id) {
 
     /* execute the query */
     PGresult *res = PQexec(db_connection, str);
-
     /* release the lock */
     pthread_mutex_unlock(&mut);
 
     /* get the value of the result */
-    char *value = PQgetvalue(res, 0, 0);
+    char *value = NULL;
+    if(PQresultStatus(res) == PGRES_TUPLES_OK)
+        value = PQgetvalue(res, 0, 0);
 
     /* translating the result to an int */
-    int result = strncmp(value, "t", 1) == 0 ? 1 : 0;
+    int result=0;
+    if(value)
+        result = strncmp(value, "t", 1) == 0 ? 1 : 0;
 
     /* cleanup */
     clear_result(res);

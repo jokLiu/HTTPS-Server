@@ -10,14 +10,68 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <assert.h>
+#include <semaphore.h>
 #include <pthread.h>
 #include <openssl/ssl.h>
 #include <openssl/err.h>
-
+#include <openssl/crypto.h>
+#include <time.h>
 #include "service_client_socket.h"
 #include "service_listen_socket_multithread.h"
 #include "get_listen_socket.h"
+#include "database_connection.h"
 #include "make_printable_address.h"
+
+
+static pthread_mutex_t *lockarray;
+static sem_t lock;
+
+
+/* provide the implementation of static locking with callbacks.
+   by using these callbacks, OpenSSL can manage its own internal thread safety
+   and we will not have to worry about protecting calls into the library with
+   our own thread-management code.
+   this allows us to avoid different double after-free and
+   additional overhead with OpenSSL and threading */
+
+/* a callback function for locking and unlocking the given thread. */
+static void lock_callback(int mode, int type, char *file, int line) {
+    if (mode & CRYPTO_LOCK) {
+        pthread_mutex_lock(&(lockarray[type]));
+    } else {
+        pthread_mutex_unlock(&(lockarray[type]));
+    }
+}
+
+/* callback function which returns an unsigned long number
+   that should uniquely identify the calling thread from all other threads. */
+static unsigned long thread_id(void) {
+    unsigned long ret;
+    ret = (unsigned long) pthread_self();
+    return ret;
+}
+
+/* helper function to initialize all the locks and callbacks */
+static void init_locks(void) {
+    lockarray = (pthread_mutex_t *) OPENSSL_malloc(CRYPTO_num_locks() *
+                                                   sizeof(pthread_mutex_t));
+    for (int i = 0; i < CRYPTO_num_locks(); i++) {
+        pthread_mutex_init(&(lockarray[i]), NULL);
+    }
+
+    CRYPTO_set_id_callback((unsigned long (*)()) thread_id);
+    CRYPTO_set_locking_callback((void (*)()) lock_callback);
+}
+
+/* helper function to destroy all the locks and callbacks */
+static void kill_locks(void) {
+    CRYPTO_set_locking_callback(NULL);
+    for (int i = 0; i < CRYPTO_num_locks(); i++)
+        pthread_mutex_destroy(&(lockarray[i]));
+
+    OPENSSL_free(lockarray);
+}
+
 
 /* struct to pass attributes to the thread
    because thread function takes single *void pointer */
@@ -25,19 +79,21 @@ typedef struct thread_control_block {
     int client; /* socket */
     struct sockaddr_in6 their_address;
     socklen_t their_address_size;
-    SSL_CTX *ctx; // TODO check if this context has to be in thread or not
+    SSL_CTX *ctx;
 } thread_control_block_t;
 
-// TODO check if it has to be removed
-pthread_mutex_t mut;
 
 /* client thread for serving a single client */
 static void *client_thread(void *data) {
+
+
+
     /* cast data to the thread_control_block */
     thread_control_block_t *tcb_p = (thread_control_block_t *) data;
 
     /* making sure that we received correct attributes */
     assert(tcb_p->their_address_size == sizeof(tcb_p->their_address));
+
 
     /* make a printable address of the client
        for the easier identification and processing */
@@ -58,10 +114,16 @@ static void *client_thread(void *data) {
         redirect_http_to_https(tcb_p->client);
     }
 
+    /* we allow only certain number of requests due to limited
+       amount of open file descriptors per user which is usually 1024 */
+    sem_wait(&lock);
+
     /* call function to handle the requests from client */
     (void) service_client_socket(tcb_p->client, ssl, printable);
+    sem_post(&lock);
 
     /* cleanup */
+    SSL_free(ssl);
     close(tcb_p->client);
     free(printable);        /* this was strdup'd */
     free(data);            /* this was malloc'd */
@@ -73,11 +135,33 @@ static void *client_thread(void *data) {
    faster processing */
 int service_listen_socket_multithread(const int s) {
 
-    /* initialise ssl and create it's context */
-    // TODO check what place is the best for these
+
+    init_locks();
+    /* database lock for locking a database when
+       there is a possibility to corrupt data */
+    if (pthread_mutex_init(&mut, NULL) != 0) {
+        printf("mutex init failed\n");
+        return 1;
+    }
+
+    /* we use a semaphore to ensure that no more threads are
+       serving requests because of limited amount of file
+       descriptors allowed to be opened on linux systems */
+    if (sem_init(&lock, 0, 50) != 0) {
+        printf("mutex init failed\n");
+        return 1;
+    }
+
+    /* initialise ssl and create it's context.
+       create one server context per-hos,
+       set the cert and private key of that context,
+       and then share that context between all downstream
+       SSL* sockets that act on behalf of that host. */
     init_openssl();
     SSL_CTX *ctx = create_context();
     configure_context(ctx);
+
+
 
     /* accept takes a socket in the listening state, and waits until a
        connection arrives.  It returns the new connection, and updates the
@@ -112,7 +196,7 @@ int service_listen_socket_multithread(const int s) {
            thread control block, rather than onto our own stack */
         int client;
         if ((client = accept(s, (struct sockaddr *) &(tcb_p->their_address),
-                                              &(tcb_p->their_address_size))) < 0) {
+                             &(tcb_p->their_address_size))) < 0) {
             perror("accept");
             /* may as well carry on, this is probably temporary */
         } else {
@@ -120,7 +204,6 @@ int service_listen_socket_multithread(const int s) {
             tcb_p->client = client;
             tcb_p->ctx = ctx;
             pthread_t thread;
-            pthread_attr_t pthread_attr; /* attributes for newly created thread */
 
             /* we now create a thread and start it by calling
                client_thread with the tcb_p pointer.  That data was malloc'd,
@@ -130,9 +213,9 @@ int service_listen_socket_multithread(const int s) {
                conditions as it was destroyed (or not) before the created
                thread finished using it. */
 
-            /* we initialise attributes */
-            if (pthread_attr_init(&pthread_attr)) {
-                fprintf(stderr, "Creating initial thread attributes failed!\n");
+            /* create separate thread for processing */
+            if (pthread_create(&thread, 0, &client_thread, (void *) tcb_p) != 0) {
+                perror("pthread_create");
                 goto error_exit; /* avoid break here in of the later
 				   addition of an enclosing loop */
             }
@@ -140,21 +223,18 @@ int service_listen_socket_multithread(const int s) {
             /* we set the thread to be of detached state in order not to leak
                the memory because by default joinable thread will not be cleaned
                up until it is joined */
-            if (pthread_attr_setdetachstate(&pthread_attr, PTHREAD_CREATE_DETACHED)) {
-                fprintf(stderr, "setting thread attributes failed!\n");
-                goto error_exit; /* avoid break here in of the later
-				   addition of an enclosing loop */
+            int error = pthread_detach(thread);
+            if (error != 0) {
+                fprintf(stderr, "pthread_detach failed %s, continuing\n", strerror(error));
             }
 
-            /* create separate thread for processing */
-            if (pthread_create(&thread, &pthread_attr, &client_thread, (void *) tcb_p) != 0) {
-                perror("pthread_create");
-                goto error_exit; /* avoid break here in of the later
-				   addition of an enclosing loop */
-            }
         }
     }
+
+    /* cleanup */
     error_exit:
+    kill_locks();
+    sem_destroy(&lock);
     cleanup_openssl();
     SSL_CTX_free(ctx);
     return -1;

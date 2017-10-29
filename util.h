@@ -1,3 +1,9 @@
+
+typedef struct server_info {
+    char *host;
+    char *port;
+} server_info;
+
 int content_size(char **strings, int s);
 
 int find_content_length(char **strings, int s);
