@@ -10,33 +10,7 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="12c4165a-4c20-4a68-9189-5bf7165e7a42" name="Default" comment="">
-      <change type="DELETED" beforePath="$PROJECT_DIR$/database_connection.o" afterPath="" />
-      <change type="DELETED" beforePath="$PROJECT_DIR$/get_listen_socket.o" afterPath="" />
-      <change type="DELETED" beforePath="$PROJECT_DIR$/main.o" afterPath="" />
-      <change type="DELETED" beforePath="$PROJECT_DIR$/make_printable_address.o" afterPath="" />
-      <change type="DELETED" beforePath="$PROJECT_DIR$/multi_thread_server" afterPath="" />
-      <change type="DELETED" beforePath="$PROJECT_DIR$/read_client_input.o" afterPath="" />
-      <change type="DELETED" beforePath="$PROJECT_DIR$/service_client_socket.o" afterPath="" />
-      <change type="DELETED" beforePath="$PROJECT_DIR$/service_listen_socket_multithread.o" afterPath="" />
-      <change type="DELETED" beforePath="$PROJECT_DIR$/util.o" afterPath="" />
-      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/.idea/workspace.xml" afterPath="$PROJECT_DIR$/.idea/workspace.xml" />
-      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/Makefile" afterPath="$PROJECT_DIR$/Makefile" />
       <change type="MODIFICATION" beforePath="$PROJECT_DIR$/database_connection.c" afterPath="$PROJECT_DIR$/database_connection.c" />
-      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/get_listen_socket.c" afterPath="$PROJECT_DIR$/get_listen_socket.c" />
-      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/main.c" afterPath="$PROJECT_DIR$/main.c" />
-      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/pages/file_too_large.html" afterPath="$PROJECT_DIR$/pages/file_too_large.html" />
-      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/pages/filenotuploaded.html" afterPath="$PROJECT_DIR$/pages/filenotuploaded.html" />
-      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/pages/past.html" afterPath="$PROJECT_DIR$/pages/past.html" />
-      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/pages/profile.html" afterPath="$PROJECT_DIR$/pages/profile.html" />
-      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/pages/redirect.html" afterPath="$PROJECT_DIR$/pages/redirect.html" />
-      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/read_client_input.c" afterPath="$PROJECT_DIR$/read_client_input.c" />
-      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/read_client_input.h" afterPath="$PROJECT_DIR$/read_client_input.h" />
-      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/service_client_socket.c" afterPath="$PROJECT_DIR$/service_client_socket.c" />
-      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/service_client_socket.h" afterPath="$PROJECT_DIR$/service_client_socket.h" />
-      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/service_listen_socket_multithread.c" afterPath="$PROJECT_DIR$/service_listen_socket_multithread.c" />
-      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/service_listen_socket_multithread.h" afterPath="$PROJECT_DIR$/service_listen_socket_multithread.h" />
-      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/test.sh" afterPath="$PROJECT_DIR$/test.sh" />
-      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/util.h" afterPath="$PROJECT_DIR$/util.h" />
     </list>
     <ignored path="$PROJECT_DIR$/cmake-build-debug/" />
     <option name="EXCLUDED_CONVERTED_TO_IGNORED" value="true" />
@@ -48,11 +22,11 @@
   </component>
   <component name="FileEditorManager">
     <leaf SIDE_TABS_SIZE_LIMIT_KEY="300">
-      <file leaf-file-name="service_client_socket.c" pinned="false" current-in-tab="true">
+      <file leaf-file-name="service_client_socket.c" pinned="false" current-in-tab="false">
         <entry file="file://$PROJECT_DIR$/service_client_socket.c">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="198">
-              <caret line="11" column="19" lean-forward="false" selection-start-line="11" selection-start-column="19" selection-end-line="11" selection-end-column="19" />
+            <state relative-caret-position="702">
+              <caret line="39" column="45" lean-forward="false" selection-start-line="39" selection-start-column="45" selection-end-line="39" selection-end-column="45" />
               <folding />
             </state>
           </provider>
@@ -68,11 +42,11 @@
           </provider>
         </entry>
       </file>
-      <file leaf-file-name="database_connection.c" pinned="false" current-in-tab="false">
+      <file leaf-file-name="database_connection.c" pinned="false" current-in-tab="true">
         <entry file="file://$PROJECT_DIR$/database_connection.c">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="774">
-              <caret line="43" column="67" lean-forward="false" selection-start-line="43" selection-start-column="67" selection-end-line="43" selection-end-column="67" />
+            <state relative-caret-position="342">
+              <caret line="19" column="30" lean-forward="false" selection-start-line="19" selection-start-column="30" selection-end-line="19" selection-end-column="30" />
               <folding />
             </state>
           </provider>
@@ -179,9 +153,9 @@
       <find>query</find>
       <find>get_result</find>
       <find>alloc</find>
-      <find>printf</find>
       <find>myname</find>
       <find>file</find>
+      <find>printf</find>
     </findStrings>
   </component>
   <component name="Git.Settings">
@@ -200,7 +174,6 @@
         <option value="$PROJECT_DIR$/make_printable_address.c" />
         <option value="$PROJECT_DIR$/database_connection.h" />
         <option value="$PROJECT_DIR$/get_listen_socket.c" />
-        <option value="$PROJECT_DIR$/database_connection.c" />
         <option value="$PROJECT_DIR$/service_listen_socket_multithread.h" />
         <option value="$PROJECT_DIR$/read_client_input.h" />
         <option value="$PROJECT_DIR$/read_client_input.c" />
@@ -209,6 +182,7 @@
         <option value="$PROJECT_DIR$/util.h" />
         <option value="$PROJECT_DIR$/service_listen_socket_multithread.c" />
         <option value="$PROJECT_DIR$/service_client_socket.c" />
+        <option value="$PROJECT_DIR$/database_connection.c" />
       </list>
     </option>
   </component>
@@ -308,17 +282,18 @@
       <workItem from="1509275113479" duration="5099000" />
       <workItem from="1509281901696" duration="3822000" />
       <workItem from="1509286564333" duration="603000" />
-      <workItem from="1509288714555" duration="11103000" />
+      <workItem from="1509288714555" duration="11334000" />
     </task>
     <servers />
   </component>
   <component name="TimeTrackingManager">
-    <option name="totallyTimeSpent" value="207633000" />
+    <option name="totallyTimeSpent" value="207864000" />
   </component>
   <component name="ToolWindowManager">
     <frame x="39" y="58" width="1093" height="1022" extended-state="0" />
+    <editor active="true" />
     <layout>
-      <window_info id="Project" active="true" anchor="left" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="true" show_stripe_button="true" weight="0.27081427" sideWeight="0.5" order="0" side_tool="false" content_ui="combo" />
+      <window_info id="Project" active="false" anchor="left" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="true" show_stripe_button="true" weight="0.27081427" sideWeight="0.5" order="0" side_tool="false" content_ui="combo" />
       <window_info id="TODO" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" show_stripe_button="true" weight="0.33" sideWeight="0.5" order="6" side_tool="false" content_ui="tabs" />
       <window_info id="CMake" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" show_stripe_button="true" weight="0.3264192" sideWeight="0.5" order="7" side_tool="false" content_ui="tabs" />
       <window_info id="Event Log" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" show_stripe_button="true" weight="0.33" sideWeight="0.5" order="7" side_tool="true" content_ui="tabs" />
@@ -635,18 +610,18 @@
         </state>
       </provider>
     </entry>
-    <entry file="file://$PROJECT_DIR$/database_connection.c">
+    <entry file="file://$PROJECT_DIR$/service_client_socket.c">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="774">
-          <caret line="43" column="67" lean-forward="false" selection-start-line="43" selection-start-column="67" selection-end-line="43" selection-end-column="67" />
+        <state relative-caret-position="702">
+          <caret line="39" column="45" lean-forward="false" selection-start-line="39" selection-start-column="45" selection-end-line="39" selection-end-column="45" />
           <folding />
         </state>
       </provider>
     </entry>
-    <entry file="file://$PROJECT_DIR$/service_client_socket.c">
+    <entry file="file://$PROJECT_DIR$/database_connection.c">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="198">
-          <caret line="11" column="19" lean-forward="false" selection-start-line="11" selection-start-column="19" selection-end-line="11" selection-end-column="19" />
+        <state relative-caret-position="342">
+          <caret line="19" column="30" lean-forward="false" selection-start-line="19" selection-start-column="30" selection-end-line="19" selection-end-column="30" />
           <folding />
         </state>
       </provider>

@@ -16,8 +16,8 @@ void do_exit(PGconn *db_connection) {
 /* create a database connection to the webserver */
 PGconn *create_connection() {
 
-    PGconn *db_connection = PQconnectdb("user=webserver "\
-            "password=webserver dbname=webserver");
+    PGconn *db_connection = PQconnectdb("user=jxl706 "\
+            "password=cisuphek dbname=dbteach2");
     return db_connection;
 }
 
